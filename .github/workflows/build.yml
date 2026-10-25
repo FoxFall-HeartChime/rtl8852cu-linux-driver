@@ -1,0 +1,108 @@
+name: build
+
+# Compile 8852cu against the kernel versions this driver is adapted for.
+# Every job runs a real `make` over the whole driver, so API breaks in a
+# header or a callback signature fail the build instead of being missed.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: linux-${{ matrix.kernel }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Boundary releases for each version guard in the driver:
+        #   6.6            oldest LTS still in support
+        #   6.12.101       set_monitor_channel() gained a netdev argument
+        #   6.15           del_timer* -> timer_delete*, EXTRA_CFLAGS dropped
+        #   6.16           from_timer() -> timer_container_of()
+        #   6.17           cfg80211 gained radio_idx
+        #   6.18           kernel crypto gained hmac_sha256()
+        #   6.19           netif_napi_add() unchanged, sanity check
+        #   7.1            cfg80211 callbacks take wdev, scan changes
+        #   7.2            strncpy() removed from the kernel
+        #   7.3            mgmt_tx/roc cookies by value, probe_client rename
+        #   latest         newest stable from kernel.org, catches future breakage
+        kernel: ['6.6', '6.12.101', '6.15', '6.16', '6.17', '6.18', '6.19', '7.1', '7.2', '7.3', 'latest']
+    env:
+      KERNEL: ${{ matrix.kernel }}
+      # must match the tarball's top-level directory: linux-<version>
+      KERNEL_DIR: ${{ runner.temp }}/kernel/linux-${{ matrix.kernel }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex libssl-dev libelf-dev dwarves xz-utils jq openssl
+
+      - name: Fetch kernel source
+        run: |
+          set -euo pipefail
+          if [ "$KERNEL" = latest ]; then
+            # latest_stable is the newest release overall; the "stable"
+            # moniker points at the previous series (e.g. 7.2.x while 7.3 is out)
+            KERNEL=$(curl -fsSL https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+            KERNEL_DIR="$(dirname "$KERNEL_DIR")/linux-$KERNEL"
+            { echo "KERNEL=$KERNEL"; echo "KERNEL_DIR=$KERNEL_DIR"; } >> "$GITHUB_ENV"
+          fi
+          # tarballs live under v<major>.x/, e.g. v7.x/linux-7.3.tar.xz
+          url="https://cdn.kernel.org/pub/linux/kernel/v${KERNEL%%.*}.x/linux-${KERNEL}.tar.xz"
+          mkdir -p "$(dirname "$KERNEL_DIR")"
+          echo "downloading $url"
+          curl -fsSL "$url" | tar -xJ -C "$(dirname "$KERNEL_DIR")"
+          test -f "$KERNEL_DIR/Makefile"
+          echo "building against $(make -s -C "$KERNEL_DIR" kernelversion)"
+
+      - name: Configure kernel
+        run: |
+          set -euo pipefail
+          make -s -C "$KERNEL_DIR" defconfig
+          # cfg80211/USB are modules in defconfig; make them built-in so the
+          # driver links against a fully populated kernel. No debug info keeps
+          # the prep and compile step short. CONFIG_WERROR is turned off on
+          # purpose: this vendor driver is not warning-clean, and API breakage
+          # shows up as a hard error anyway.
+          "$KERNEL_DIR/scripts/config" --file "$KERNEL_DIR/.config" \
+            --enable WLAN --enable CFG80211 \
+            --enable USB --enable USB_SUPPORT \
+            --enable DEBUG_INFO_NONE --disable DEBUG_INFO \
+            --disable WERROR
+          make -s -C "$KERNEL_DIR" olddefconfig
+          make -s -C "$KERNEL_DIR" -j"$(nproc)" modules_prepare
+
+      - name: Build driver
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" KSRC="$KERNEL_DIR" 2>&1 | tee build.log
+          test -s 8852cu.ko
+          ls -l 8852cu.ko
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-linux-${{ matrix.kernel }}
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: Upload module
+        if: matrix.kernel == '7.3' || matrix.kernel == 'latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 8852cu-linux-${{ matrix.kernel }}
+          path: 8852cu.ko

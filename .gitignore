@@ -1,0 +1,22 @@
+# 编译产物
+*.o
+*.ko
+*.mod
+*.mod.c
+.*.cmd
+Module.symvers
+modules.order
+Module.markers
+.tmp_versions/
+
+# 本地构建/发布目录
+build.log
+out/
+.kernel/
+
+# 本地工具状态
+.mimosa/
+
+# 编辑器
+*.swp
+*~
