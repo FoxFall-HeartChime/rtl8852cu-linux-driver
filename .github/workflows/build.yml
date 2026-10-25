@@ -38,8 +38,6 @@ jobs:
         kernel: ['6.6', '6.12.101', '6.15', '6.16', '6.17', '6.18', '6.19', '7.1', '7.2', '7.3', 'latest']
     env:
       KERNEL: ${{ matrix.kernel }}
-      # must match the tarball's top-level directory: linux-<version>
-      KERNEL_DIR: ${{ runner.temp }}/kernel/linux-${{ matrix.kernel }}
 
     steps:
       - uses: actions/checkout@v4
@@ -57,9 +55,10 @@ jobs:
             # latest_stable is the newest release overall; the "stable"
             # moniker points at the previous series (e.g. 7.2.x while 7.3 is out)
             KERNEL=$(curl -fsSL https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
-            KERNEL_DIR="$(dirname "$KERNEL_DIR")/linux-$KERNEL"
-            { echo "KERNEL=$KERNEL"; echo "KERNEL_DIR=$KERNEL_DIR"; } >> "$GITHUB_ENV"
           fi
+          # must match the tarball's top-level directory: linux-<version>
+          KERNEL_DIR="$RUNNER_TEMP/kernel/linux-$KERNEL"
+          { echo "KERNEL=$KERNEL"; echo "KERNEL_DIR=$KERNEL_DIR"; } >> "$GITHUB_ENV"
           # tarballs live under v<major>.x/, e.g. v7.x/linux-7.3.tar.xz
           url="https://cdn.kernel.org/pub/linux/kernel/v${KERNEL%%.*}.x/linux-${KERNEL}.tar.xz"
           mkdir -p "$(dirname "$KERNEL_DIR")"
