@@ -540,11 +540,16 @@ static inline void rtw_thread_enter(char *name)
 
 static inline void rtw_thread_exit(_completion *comp)
 {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0))
-	complete_and_exit(comp, 0);
-#else
-	kthread_complete_and_exit(comp, 0);
-#endif
+	/*
+	 * complete_and_exit() was removed upstream in 5.17 in favour of
+	 * kthread_complete_and_exit(), but enterprise kernels sitting on an
+	 * older version number (RHEL 9's 5.14) dropped the old name as well,
+	 * so no version check can pick a symbol that exists everywhere.
+	 * Signal the waiter and let the thread function return instead.
+	 * Every caller returns immediately after this call.
+	 */
+	if (comp)
+		complete(comp);
 }
 
 #ifdef CONFIG_PHL_CPU_BALANCE_THREAD
@@ -835,11 +840,11 @@ struct rtw_timer_list {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
 static inline void timer_hdl(struct timer_list *in_timer)
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
-	_timer *ptimer = timer_container_of(ptimer, in_timer, timer);
-#else
-	_timer *ptimer = from_timer(ptimer, in_timer, timer);
-#endif
+	/* from_timer() was renamed timer_container_of() in 6.16, and some
+	 * enterprise kernels removed the old name on an older version base;
+	 * container_of() has the same definition on every version.
+	 */
+	_timer *ptimer = container_of(in_timer, _timer, timer);
 
 	ptimer->function(ptimer->arg);
 }

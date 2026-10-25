@@ -1450,10 +1450,12 @@ exit:
 
 	RTW_INFO("%s: Exit !!\n", __func__);
 	rtw_thread_exit(NULL);
+	/* kthread_complete_and_exit() never returned, keep that behaviour */
+	return 0;
 
 //	rtw_phl_get_tx_req_stats(GET_PHL_INFO(dvobj),
 //				&idle_cnt, &busy_cnt, &total_cnt);
-	RTW_INFO("%s: tx req idle cnt=%d ,busy=%d, total=%d!! i =%d\n",
+	RTW_INFO("%s: tx req idle cnt=%d ,busy=%d, total=%d!! i=%d\n",
 				__func__, idle_cnt, busy_cnt, total_cnt, i);
 
 	return 0;

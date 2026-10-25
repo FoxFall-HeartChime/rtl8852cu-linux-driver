@@ -168,12 +168,15 @@ EOF
 
 	if [ "$FAMILY" = debian ] && have dpkg-deb; then
 		DEBARCH=$(deb_arch)
+		# dpkg only accepts lowercase alnum plus '+', '-', '.', so the
+		# kernel release (e.g. 6.12.57+deb13-amd64) needs its own mapping
+		DEB_SAFE=$(printf '%s' "$KREL" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9+.-]/-/g; s/^[^a-z0-9]*//')
 		DEBROOT="$WORK/debroot"
 		mkdir -p "$DEBROOT/DEBIAN" \
 		         "$DEBROOT/lib/modules/$KREL/updates"
 		cp "$WORK/$MODULE.ko" "$DEBROOT/lib/modules/$KREL/updates/"
 		cat > "$DEBROOT/DEBIAN/control" <<EOF
-Package: $MODULE-modules-$SAFE
+Package: $MODULE-modules-$DEB_SAFE
 Version: ${PKG_VERSION:-1.1}
 Architecture: $DEBARCH
 Maintainer: FoxFall-HeartChime <344287043+FoxFall-HeartChime@users.noreply.github.com>

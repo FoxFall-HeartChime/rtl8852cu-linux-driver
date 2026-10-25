@@ -331,9 +331,20 @@ EXTRA_CFLAGS += -I$(src)/platform
 #_PLATFORM_FILES := platform/platform_ops.o
 OBJS += $(_PLATFORM_FILES)
 
-KER_MAJOR_6 := $(shell echo `MAKEFLAGS= $(MAKE) -s -C $(KSRC) kernelversion 2>/dev/null | cut -d. -f1` \>= 6 | bc -l)
-KER_MAJOR_7 := $(shell echo `MAKEFLAGS= $(MAKE) -s -C $(KSRC) kernelversion 2>/dev/null | cut -d. -f1` \>= 7 | bc -l)
-KER_MINOR_13 := $(shell echo `MAKEFLAGS= $(MAKE) -s -C $(KSRC) kernelversion 2>/dev/null | cut -d. -f2` \>= 13 | bc -l)
+# Kernel version detection: prefer the release string the kernel tree ships,
+# fall back to `make kernelversion` (its output may carry extra lines, so keep
+# only the leading x.y). Comparisons use shell test instead of bc so this also
+# works where bc is absent or chokes on unexpected output.
+RTW_KVER := $(strip $(shell cat $(KSRC)/include/config/kernel.release 2>/dev/null))
+ifeq ($(RTW_KVER),)
+RTW_KVER := $(shell MAKEFLAGS= $(MAKE) -s -C $(KSRC) kernelversion 2>/dev/null | sed -n 's/^\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)
+endif
+KER_MAJOR := $(shell echo $(RTW_KVER) | cut -d. -f1)
+KER_MINOR := $(shell echo $(RTW_KVER) | cut -d. -f2)
+KER_MAJOR_6 := $(shell [ -n "$(KER_MAJOR)" ] && [ "$(KER_MAJOR)" -ge 6 ] 2>/dev/null && echo 1)
+KER_MAJOR_7 := $(shell [ -n "$(KER_MAJOR)" ] && [ "$(KER_MAJOR)" -ge 7 ] 2>/dev/null && echo 1)
+KER_MINOR_13 := $(shell [ -n "$(KER_MINOR)" ] && [ "$(KER_MINOR)" -ge 13 ] 2>/dev/null && echo 1)
+KER_MINOR_15 := $(shell [ -n "$(KER_MINOR)" ] && [ "$(KER_MINOR)" -ge 15 ] 2>/dev/null && echo 1)
 ifeq ($(KER_MAJOR_7), 1)
 export KBUILD_ABS_SRCTREE := 1
 else ifeq ($(KER_MAJOR_6), 1)
@@ -927,7 +938,6 @@ include $(src)/phl/phl.mk
 
 # kbuild removed EXTRA_CFLAGS support in 6.15; mirror EXTRA_CFLAGS into
 # ccflags-y there. KER_MAJOR_7 bypasses the minor check on 7.x kernels.
-KER_MINOR_15 := $(shell cd $(KSRC); echo `make kernelversion | cut -d. -f2` \>= 15 | bc -l)
 ifeq ($(KER_MAJOR_7), 1)
 ccflags-y := $(EXTRA_CFLAGS)
 else ifeq ($(KER_MAJOR_6), 1)

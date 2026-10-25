@@ -234,12 +234,11 @@ struct rtw_usb_drv usb_drv = {
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 22))
 	.usbdrv.reset_resume   = rtw_dev_resume,
 #endif
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19))
-	.usbdrv.driver.shutdown = rtw_dev_shutdown,
-#else
-	.usbdrv.drvwrap.driver.shutdown = rtw_dev_shutdown,
-#endif
+	/* .shutdown is set in rtw_dev_probe(): the device_driver member moved
+	 * out of drvwrap in 6.8, and some stable/derivative kernels (for example
+	 * Debian 12's 6.1.0-54) carry that removal, so a version check cannot
+	 * reliably tell the two layouts apart.
+	 */
 };
 
 static inline int RT_usb_endpoint_dir_in(const struct usb_endpoint_descriptor *epd)
@@ -877,6 +876,13 @@ static int rtw_dev_probe(struct usb_interface *pusb_intf, const struct usb_devic
 	struct dvobj_priv *dvobj;
 
 	RTW_INFO("+%s\n", __func__);
+
+	/* The interface is already bound to us here, so its device_driver is
+	 * reachable without knowing where usb_driver embeds it (see usb_drv).
+	 * device_shutdown() reads this pointer at poweroff time.
+	 */
+	if (pusb_intf->dev.driver)
+		pusb_intf->dev.driver->shutdown = rtw_dev_shutdown;
 
 	/* step 0. */
 	process_spec_devid(pdid);
