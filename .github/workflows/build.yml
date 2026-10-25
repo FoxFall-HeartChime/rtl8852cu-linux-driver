@@ -5,6 +5,7 @@ name: build
 # header or a callback signature fail the build instead of being missed.
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
@@ -87,7 +88,11 @@ jobs:
       - name: Build driver
         run: |
           set -euo pipefail
-          make -j"$(nproc)" KSRC="$KERNEL_DIR" 2>&1 | tee build.log
+          # modules_prepare does not generate Module.symvers, so modpost would
+          # report every kernel symbol as unresolved. Downgrade that check to
+          # warnings: this job verifies that the driver compiles, and package
+          # builds against real distro headers do have Module.symvers.
+          make -j"$(nproc)" KSRC="$KERNEL_DIR" KBUILD_MODPOST_WARN=1 2>&1 | tee build.log
           test -s 8852cu.ko
           ls -l 8852cu.ko
 

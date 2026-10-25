@@ -133,7 +133,14 @@ main() {
 	log "源码树：$KSRC"
 
 	log "编译"
-	( cd "$WORK" && make -j"$(proc_count)" KSRC="$KSRC" )
+	if [ -f "$KSRC/Module.symvers" ]; then
+		MODPOST_FLAG=""
+	else
+		MODPOST_FLAG="KBUILD_MODPOST_WARN=1"
+		log "注意：$KSRC 没有 Module.symvers，符号解析检查降级为警告"
+	fi
+	# shellcheck disable=SC2086
+	( cd "$WORK" && make -j"$(proc_count)" KSRC="$KSRC" $MODPOST_FLAG )
 	[ -f "$WORK/$MODULE.ko" ] || die "未生成 $MODULE.ko"
 
 	VERMAGIC=$(ko_vermagic "$WORK/$MODULE.ko")

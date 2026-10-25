@@ -965,7 +965,8 @@ all: modules
 modules:
 #	rm -f .symvers.$(MODULE_NAME)
 
-	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KSRC) M=$(M)  modules
+# '+' keeps the jobserver, otherwise the sub-make drops back to -j1
+	+$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KSRC) M=$(M)  modules
 
 #	$(CC_STRIP) --strip-unneeded ${OUT_DIR}/$(M)/$(MODULE_NAME).ko
 #	cp Module.symvers .symvers.$(MODULE_NAME)
